@@ -1,0 +1,822 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Print Part Register — Jinlite Garments</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700;800&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+
+<!-- Firebase (compat SDK — simplest for a single static file) -->
+<script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore-compat.js"></script>
+
+<style>
+  :root{
+    --ink:#16241c;
+    --ink-dim:#4c6356;
+    --ink-faint:#7c9788;
+    --bg:#f4faf6;
+    --bg-raised:#ffffff;
+    --bg-card:#ffffff;
+    --line:#cfe6d8;
+    --line-soft:#e3f1e9;
+    --good:#2f9e58;
+    --good-soft:#e5f6ec;
+    --warn:#b8791f;
+    --warn-soft:#faf0e0;
+    --bad:#c9463b;
+    --brown:#8a5a34;
+    --coral:#ef7a63;
+    --blue:#3d7ec9;
+    --navy:#2b3f68;
+    --radius:10px;
+    font-size:16px;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;max-width:100%;overflow-x:hidden;}
+  body{
+    background:var(--bg);
+    color:var(--ink);
+    font-family:'Inter', sans-serif;
+    min-height:100vh;
+    -webkit-font-smoothing:antialiased;
+  }
+  ::selection{ background: rgba(47,158,88,0.22); }
+
+  .num{ font-family:'IBM Plex Mono', monospace; font-variant-numeric: tabular-nums; }
+
+  /* ---------- Header ---------- */
+  header{
+    position:sticky; top:0; z-index:40;
+    background:rgba(255,255,255,0.96);
+    backdrop-filter: blur(10px);
+    border-bottom:1px solid var(--line);
+  }
+  .header-inner{
+    max-width:1180px; margin:0 auto; padding:16px 20px 0 20px;
+  }
+  .brand{
+    display:flex; align-items:baseline; gap:12px; margin-bottom:14px;
+  }
+  .brand .mark{
+    width:30px;height:30px;border-radius:6px;
+    background:linear-gradient(135deg,var(--good),#7bc99a);
+    flex:0 0 auto; box-shadow:0 0 0 1px var(--line);
+  }
+  .brand h1{
+    font-family:'Barlow Condensed', sans-serif; font-weight:800; letter-spacing:0.02em;
+    font-size:22px; margin:0; text-transform:uppercase; color:var(--ink);
+  }
+  .brand .sub{ color:var(--ink-faint); font-size:12.5px; letter-spacing:0.03em; }
+  .brand .status-dot{
+    margin-left:auto; display:flex; align-items:center; gap:6px;
+    font-size:12px; color:var(--ink-faint); font-family:'IBM Plex Mono',monospace;
+  }
+  .status-dot .dot{ width:7px;height:7px;border-radius:50%; background:var(--ink-faint); }
+  .status-dot.live .dot{ background:var(--good); box-shadow:0 0 0 3px rgba(47,158,88,0.15); }
+  .status-dot.err .dot{ background:var(--bad); }
+
+  nav.tabs{
+    max-width:1180px; margin:0 auto; padding:0 20px;
+    display:flex; gap:2px; overflow-x:auto; scrollbar-width:none;
+  }
+  nav.tabs::-webkit-scrollbar{display:none;}
+  .tab{
+    display:flex; align-items:center; gap:8px;
+    padding:10px 16px; border:none; background:none; cursor:pointer;
+    color:var(--ink-dim); font-family:'Barlow Condensed',sans-serif; font-weight:600;
+    font-size:15.5px; letter-spacing:0.03em; text-transform:uppercase;
+    border-bottom:2px solid transparent; white-space:nowrap;
+    transition:color .15s;
+  }
+  .tab:hover{ color:var(--ink); background:var(--good-soft); }
+  .tab.active{ color:var(--ink); border-bottom-color:var(--good); background:var(--good-soft); }
+  .tab .swatch{ width:9px;height:9px;border-radius:50%; flex:0 0 auto; box-shadow:0 0 0 1px rgba(0,0,0,0.15); }
+  .tab .add-color{
+    width:9px;height:9px; border:1.4px dashed var(--ink-faint); border-radius:50%;
+  }
+
+  main{ max-width:1180px; margin:0 auto; padding:22px 20px 80px 20px; }
+
+  /* ---------- Cards / stitch signature ---------- */
+  .card{
+    background:var(--bg-card);
+    border:1px solid var(--line);
+    border-radius:var(--radius);
+    box-shadow:0 1px 3px rgba(22,36,28,0.04);
+    position:relative;
+  }
+  .stitched{
+    position:relative;
+  }
+  .stitched::before{
+    content:"";
+    position:absolute; inset:6px;
+    border:1.5px dashed rgba(47,158,88,0.18);
+    border-radius:calc(var(--radius) - 3px);
+    pointer-events:none;
+  }
+
+  .section-title{
+    font-family:'Barlow Condensed', sans-serif; font-weight:700; text-transform:uppercase;
+    letter-spacing:0.04em; font-size:14px; color:var(--ink-dim); margin:0 0 12px 0;
+    display:flex; align-items:center; gap:8px;
+  }
+  .section-title .n{ color:var(--ink-faint); font-weight:500; }
+
+  /* ---------- Dashboard summary stats ---------- */
+  .stat-row{ display:grid; grid-template-columns:repeat(4,1fr); gap:12px; margin-bottom:20px; }
+  @media(max-width:720px){ .stat-row{grid-template-columns:repeat(2,1fr);} }
+  .stat{
+    padding:16px 18px; border-radius:var(--radius);
+    background:var(--bg-card); border:1px solid var(--line);
+    box-shadow:0 1px 3px rgba(22,36,28,0.04);
+  }
+  .stat .label{ font-size:11.5px; color:var(--ink-faint); text-transform:uppercase; letter-spacing:0.06em; margin-bottom:6px; }
+  .stat .value{ font-family:'IBM Plex Mono',monospace; font-size:26px; font-weight:600; color:var(--ink); }
+  .stat.due .value{ color:var(--warn); }
+  .stat.recv .value{ color:var(--good); }
+
+  table{ width:100%; border-collapse:collapse; font-size:14px; }
+  thead th{
+    text-align:right; font-family:'Barlow Condensed',sans-serif; font-weight:600;
+    font-size:12.5px; text-transform:uppercase; letter-spacing:0.03em; color:var(--ink-faint);
+    padding:8px 10px; border-bottom:1px solid var(--line); white-space:nowrap;
+  }
+  thead th:first-child, thead th:nth-child(2){ text-align:left; }
+  tbody td{ padding:8px 10px; text-align:right; border-bottom:1px solid var(--line-soft); white-space:nowrap; }
+  tbody td:first-child, tbody td:nth-child(2){ text-align:left; }
+  tbody tr:hover{ background:var(--good-soft); }
+  tbody tr.total-row td{ font-weight:700; border-top:1px solid var(--line); border-bottom:none; padding-top:10px; background:var(--good-soft); }
+  .color-chip{ display:inline-flex; align-items:center; gap:7px; font-weight:600; }
+  .color-chip .sw{ width:9px;height:9px;border-radius:50%; flex:0 0 auto; box-shadow:0 0 0 1px rgba(0,0,0,0.15); }
+
+  /* Sent/Received register: merged Date + Size column */
+  .entry-table .e-date{ }
+  .entry-table .e-size{ margin-left:16px; color:var(--ink-faint); font-weight:600; font-size:12.5px; text-transform:uppercase; letter-spacing:0.03em; }
+
+  .badge{
+    display:inline-block; padding:2px 9px; border-radius:20px; font-size:11.5px;
+    font-family:'IBM Plex Mono',monospace; font-weight:600;
+  }
+  .badge.done{ background:var(--good-soft); color:var(--good); border:1px solid rgba(47,158,88,0.25); }
+  .badge.pending{ background:var(--warn-soft); color:var(--warn); border:1px solid rgba(184,121,31,0.25); }
+
+  .grid2{ display:grid; grid-template-columns:1fr 1fr; gap:16px; }
+  @media(max-width:860px){ .grid2{ grid-template-columns:1fr; } }
+
+  .panel{ padding:18px 20px; margin-bottom:16px; }
+
+  /* forms */
+  .form-row{ display:flex; gap:10px; flex-wrap:wrap; align-items:end; margin-bottom:4px; }
+  .field{ display:flex; flex-direction:column; gap:5px; }
+  .field label{ font-size:11px; text-transform:uppercase; letter-spacing:0.04em; color:var(--ink-faint); }
+  .field input, .field select{
+    background:var(--bg-raised); border:1px solid var(--line); color:var(--ink);
+    padding:8px 10px; border-radius:6px; font-family:'IBM Plex Mono',monospace; font-size:13.5px;
+    width:110px;
+  }
+  .field.wide input{ width:150px; }
+  .field input:focus, .field select:focus{ outline:none; border-color:var(--good); box-shadow:0 0 0 3px var(--good-soft); }
+  button.primary{
+    background:var(--good); color:#ffffff; border:none; padding:9px 18px; border-radius:6px;
+    font-family:'Barlow Condensed',sans-serif; font-weight:700; text-transform:uppercase; letter-spacing:0.03em;
+    cursor:pointer; font-size:14px;
+  }
+  button.primary:hover{ opacity:0.88; }
+  button.ghost{
+    background:none; border:1px solid var(--line); color:var(--ink-dim); padding:8px 14px; border-radius:6px;
+    cursor:pointer; font-size:13px; font-family:'Inter',sans-serif;
+  }
+  button.ghost:hover{ border-color:var(--good); color:var(--ink); }
+  button.icon-btn{
+    background:none; border:none; color:var(--ink-faint); cursor:pointer; padding:3px 6px; font-size:13px;
+  }
+  button.icon-btn:hover{ color:var(--bad); }
+  button.icon-btn.save-edit:hover{ color:var(--good); }
+  button.icon-btn + button.icon-btn{ margin-left:4px; }
+
+  .empty{ padding:30px 10px; text-align:center; color:var(--ink-faint); font-size:13.5px; }
+
+  .table-scroll{ overflow-x:auto; }
+
+  /* ---------- Mobile: cards instead of side-scrolling tables ---------- */
+  @media(max-width:640px){
+    .table-scroll{ overflow-x:visible; }
+    .table-scroll table{ width:100%; border-collapse:separate; border-spacing:0; }
+    .table-scroll thead{ display:none; }
+    .table-scroll tbody{ display:block; }
+    .table-scroll tbody tr{
+      display:grid; grid-template-columns:1fr 1fr; gap:0;
+      padding:0 0 10px 0; margin-bottom:12px;
+      border:1px solid var(--line); border-radius:8px; overflow:hidden;
+      background:#ffffff; white-space:normal; min-width:0;
+      box-shadow:0 1px 3px rgba(22,36,28,0.05);
+    }
+    .table-scroll tbody tr.total-row{ background:var(--good-soft); border-color:var(--good); }
+    .table-scroll tbody td{
+      display:flex; align-items:center; justify-content:space-between;
+      border-bottom:1px solid var(--line-soft); padding:8px 12px; white-space:normal; text-align:left;
+      min-width:0; overflow:hidden;
+    }
+    .table-scroll tbody td.num{ font-weight:600; }
+    .table-scroll tbody td:nth-child(2n){ border-left:1px solid var(--line-soft); }
+    .table-scroll tbody td::before{
+      content:attr(data-label); color:var(--ink-faint); font-family:'Inter',sans-serif;
+      font-size:10.5px; text-transform:uppercase; letter-spacing:0.03em; margin-right:8px;
+    }
+    .table-scroll tbody td:empty{ display:none; }
+    .table-scroll tbody td:first-child{
+      grid-column:1 / -1; font-family:'Barlow Condensed',sans-serif; font-weight:800;
+      font-size:17px; background:var(--good-soft); color:var(--ink); border-bottom:1px solid var(--line);
+      padding:9px 12px; margin-bottom:2px;
+    }
+    .table-scroll tbody td:first-child::before{ content:""; margin:0; }
+    .table-scroll tbody td:nth-last-child(-n+2){ border-bottom:none; }
+
+    /* Sent/Received register: header row = Date (left) + Size (right); data row = Back/Front/Total across */
+    .entry-table tbody tr{ grid-template-columns:repeat(3,1fr); }
+    .entry-table tbody td:first-child{
+      display:flex; align-items:center; justify-content:space-between;
+    }
+    .entry-table tbody td:first-child .e-size{ margin-left:0; }
+    .entry-table tbody td:nth-child(2){ border-left:none; }
+    .entry-table tbody td:nth-child(3){ border-left:1px solid var(--line-soft); }
+    .entry-table tbody td:nth-child(4){ border-left:1px solid var(--line-soft); }
+    .entry-table tbody td:last-child{
+      grid-column:1 / -1; justify-content:flex-end; gap:10px; border-left:none;
+      border-top:1px solid var(--line-soft); padding-top:8px; margin-top:2px;
+    }
+    .entry-table tbody td:last-child::before{ display:none; }
+  }
+
+  .toast{
+    position:fixed; bottom:20px; left:50%; transform:translateX(-50%);
+    background:var(--ink); border:1px solid var(--ink); color:#ffffff;
+    padding:10px 18px; border-radius:8px; font-size:13.5px; z-index:100;
+    opacity:0; pointer-events:none; transition:opacity .25s, transform .25s;
+  }
+  .toast.show{ opacity:1; transform:translateX(-50%) translateY(-6px); }
+
+  .setup-overlay{
+    position:fixed; inset:0; background:rgba(22,36,28,0.55); z-index:200;
+    display:flex; align-items:center; justify-content:center; padding:20px;
+  }
+  .setup-card{
+    max-width:560px; background:var(--bg-card); border:1px solid var(--line); border-radius:12px;
+    padding:28px 26px;
+  }
+  .setup-card h2{ font-family:'Barlow Condensed',sans-serif; text-transform:uppercase; font-size:20px; margin:0 0 12px 0; color:var(--ink); }
+  .setup-card p{ color:var(--ink-dim); font-size:14px; line-height:1.6; }
+  .setup-card code{ background:var(--good-soft); color:var(--ink); padding:2px 6px; border-radius:4px; font-size:12.5px; }
+  .setup-card pre{
+    background:#16241c; border:1px solid var(--line); border-radius:8px; padding:14px;
+    font-size:12px; overflow-x:auto; color:#9fe3bb;
+  }
+
+  .add-color-form{ display:flex; gap:8px; align-items:end; }
+
+  .small-muted{ color:var(--ink-faint); font-size:12px; }
+
+  /* ---------- Per-color accent (Brown / Coral / Blue / Navy) ---------- */
+  .color-card{ border-top:4px solid var(--accent, var(--good)); }
+  .color-head{
+    display:flex; align-items:center; gap:10px; margin-bottom:14px;
+  }
+  .color-head .dot{ width:14px;height:14px;border-radius:50%; background:var(--accent, var(--good)); flex:0 0 auto; box-shadow:0 0 0 3px rgba(0,0,0,0.05); }
+  .color-head .name{ font-family:'Barlow Condensed',sans-serif; font-weight:800; font-size:18px; text-transform:uppercase; letter-spacing:0.03em; color:var(--ink); }
+  .color-head .due-pill{
+    margin-left:auto; font-family:'IBM Plex Mono',monospace; font-size:12.5px; font-weight:600;
+    padding:4px 12px; border-radius:20px; background:var(--warn-soft); color:var(--warn);
+    border:1px solid rgba(184,121,31,0.25);
+  }
+  .color-head .due-pill.zero{ background:var(--good-soft); color:var(--good); border-color:rgba(47,158,88,0.25); }
+</style>
+</head>
+<body>
+
+<div id="setupOverlay" class="setup-overlay" style="display:none;">
+  <div class="setup-card">
+    <h2>Firebase config needed</h2>
+    <p>This file has a placeholder Firebase config. Open <code>print-part-register.html</code> in a text editor, find the <code>firebaseConfig</code> object near the top of the <code>&lt;script&gt;</code> section, and paste in your project's values from
+    <b>Firebase Console → Project settings → General → Your apps → SDK setup and configuration</b>.</p>
+    <pre>const firebaseConfig = {
+  apiKey: "...",
+  authDomain: "...",
+  projectId: "...",
+  storageBucket: "...",
+  messagingSenderId: "...",
+  appId: "..."
+};</pre>
+    <p>Also make sure <b>Firestore Database</b> is created in your project (any region), and rules allow read/write for this app's use case.</p>
+  </div>
+</div>
+
+<header>
+  <div class="header-inner">
+    <div class="brand">
+      <div class="mark"></div>
+      <div>
+        <h1>Print Part Register</h1>
+        <div class="sub">Jinlite Garments Manufacturer</div>
+      </div>
+      <div class="status-dot" id="connStatus"><span class="dot"></span><span id="connText">connecting…</span></div>
+    </div>
+  </div>
+  <nav class="tabs" id="tabBar"></nav>
+</header>
+
+<main id="app"></main>
+
+<div class="toast" id="toast"></div>
+
+<script>
+/* =========================================================
+   FIREBASE CONFIG — replace with your project's values
+   ========================================================= */
+const firebaseConfig = {
+  apiKey: "AIzaSyCzHJ-rGAXSAndqCoks3h2B7r0PrAj1Bb8",
+  authDomain: "others-1d317.firebaseapp.com",
+  projectId: "others-1d317",
+  storageBucket: "others-1d317.firebasestorage.app",
+  messagingSenderId: "662394579808",
+  appId: "1:662394579808:web:e5a7c0d19e9c70885c8c05"
+};
+
+const SIZES = [6,8,10,12,14,16,18,20,22,24];
+const DEFAULT_COLORS = [
+  { id:"Brown", hex:"#8a5a34" },
+  { id:"Coral", hex:"#ef7a63" },
+  { id:"Blue",  hex:"#3d7ec9" },
+  { id:"Navy",  hex:"#2b3f68" },
+];
+
+const SEED_DATA = {"Brown":{"sent":[{"date":"2026-07-01","size":12,"back":1392,"front":1392},{"date":"2026-07-01","size":14,"back":1480,"front":1480},{"date":"2026-07-02","size":8,"back":705,"front":705},{"date":"2026-07-02","size":20,"back":286,"front":286},{"date":"2026-07-02","size":22,"back":16,"front":16},{"date":"2026-07-02","size":18,"back":801,"front":801},{"date":"2026-07-02","size":16,"back":1216,"front":1216},{"date":"2026-07-02","size":12,"back":50,"front":50},{"date":"2026-07-14","size":6,"back":16,"front":16},{"date":"2026-07-14","size":24,"back":16,"front":16},{"date":"2026-07-16","size":6,"back":8,"front":8},{"date":"2026-07-16","size":22,"back":6,"front":6},{"date":"2026-07-16","size":20,"back":32,"front":32},{"date":"2026-07-16","size":8,"back":33,"front":33},{"date":"2026-07-21","size":14,"back":60,"front":60},{"date":"2026-07-21","size":24,"back":6,"front":6},{"date":"2026-07-21","size":10,"back":52,"front":52},{"date":"2026-07-21","size":12,"back":64,"front":64},{"date":"2026-07-21","size":18,"back":33,"front":33},{"date":"2026-07-21","size":16,"back":56,"front":56},{"date":"2026-07-30","size":14,"back":1720,"front":1720},{"date":"2026-07-30","size":10,"back":1340,"front":1340},{"date":"2026-07-30","size":12,"back":1620,"front":1620},{"date":"2026-08-03","size":18,"back":1002,"front":1002},{"date":"2026-08-03","size":16,"back":1664,"front":1664},{"date":"2026-08-09","size":6,"back":48,"front":48},{"date":"2026-08-09","size":24,"back":15,"front":15},{"date":"2026-08-09","size":22,"back":26,"front":26},{"date":"2026-08-09","size":8,"back":792,"front":792},{"date":"2026-08-09","size":20,"back":482,"front":482}],"recv":[{"date":"2026-07-02","size":12,"back":252,"front":250},{"date":"2026-07-03","size":12,"back":1140,"front":718},{"date":"2026-07-04","size":12,"back":0,"front":424},{"date":"2026-07-04","size":14,"back":0,"front":808},{"date":"2026-07-05","size":14,"back":807,"front":56},{"date":"2026-07-06","size":14,"back":673,"front":616},{"date":"2026-07-16","size":16,"back":460,"front":460},{"date":"2026-07-18","size":16,"back":224,"front":213},{"date":"2026-07-18","size":16,"back":459,"front":494},{"date":"2026-07-18","size":16,"back":0,"front":39},{"date":"2026-07-18","size":18,"back":372,"front":0},{"date":"2026-07-20","size":18,"back":0,"front":372},{"date":"2026-07-20","size":18,"back":385,"front":355},{"date":"2026-07-21","size":16,"back":73,"front":10},{"date":"2026-07-21","size":20,"back":254,"front":254},{"date":"2026-07-21","size":18,"back":44,"front":74},{"date":"2026-07-21","size":20,"back":64,"front":64},{"date":"2026-07-21","size":22,"back":22,"front":17},{"date":"2026-07-21","size":24,"back":22,"front":22},{"date":"2026-07-22","size":8,"back":705,"front":705},{"date":"2026-07-22","size":6,"back":24,"front":24},{"date":"2026-07-22","size":8,"back":10,"front":3},{"date":"2026-07-22","size":22,"back":0,"front":5},{"date":"2026-07-25","size":8,"back":23,"front":30},{"date":"2026-07-28","size":10,"back":52,"front":52},{"date":"2026-07-28","size":12,"back":64,"front":64},{"date":"2026-07-29","size":14,"back":60,"front":60},{"date":"2026-07-29","size":16,"back":56,"front":56},{"date":"2026-07-29","size":18,"back":33,"front":33},{"date":"2026-07-29","size":12,"back":50,"front":50},{"date":"2026-07-29","size":14,"back":40,"front":40},{"date":"2026-07-31","size":10,"back":632,"front":1320},{"date":"2026-08-01","size":10,"back":708,"front":0},{"date":"2026-08-03","size":12,"back":284,"front":284},{"date":"2026-08-03","size":10,"back":0,"front":20},{"date":"2026-08-03","size":12,"back":92,"front":92},{"date":"2026-08-04","size":12,"back":1234,"front":760},{"date":"2026-08-06","size":12,"back":0,"front":482},{"date":"2026-08-08","size":14,"back":1080,"front":1277},{"date":"2026-08-09","size":14,"back":335,"front":0},{"date":"2026-08-09","size":14,"back":222,"front":0},{"date":"2026-08-09","size":16,"back":188,"front":188},{"date":"2026-08-09","size":18,"back":111,"front":111},{"date":"2026-08-09","size":8,"back":70,"front":70},{"date":"2026-08-09","size":6,"back":48,"front":48},{"date":"2026-08-11","size":20,"back":80,"front":80},{"date":"2026-08-11","size":22,"back":26,"front":26},{"date":"2026-08-11","size":24,"back":15,"front":15},{"date":"2026-08-11","size":14,"back":43,"front":207},{"date":"2026-08-12","size":16,"back":1476,"front":1056},{"date":"2026-08-12","size":14,"back":0,"front":196},{"date":"2026-08-12","size":16,"back":0,"front":416}]},"Coral":{"sent":[{"date":"2026-07-01","size":12,"back":140,"front":140},{"date":"2026-07-01","size":14,"back":152,"front":152},{"date":"2026-07-02","size":8,"back":51,"front":51},{"date":"2026-07-02","size":20,"back":50,"front":50},{"date":"2026-07-02","size":22,"back":6,"front":6},{"date":"2026-07-02","size":18,"back":90,"front":90},{"date":"2026-07-02","size":16,"back":136,"front":136},{"date":"2026-07-21","size":14,"back":260,"front":260},{"date":"2026-07-21","size":10,"back":232,"front":232},{"date":"2026-07-21","size":12,"back":288,"front":288},{"date":"2026-07-21","size":18,"back":108,"front":108},{"date":"2026-07-21","size":16,"back":188,"front":188},{"date":"2026-07-30","size":22,"back":10,"front":10},{"date":"2026-07-30","size":10,"back":64,"front":64},{"date":"2026-07-30","size":20,"back":46,"front":46},{"date":"2026-07-30","size":6,"back":5,"front":5},{"date":"2026-08-02","size":8,"back":153,"front":153}],"recv":[{"date":"2026-07-08","size":12,"back":140,"front":136},{"date":"2026-07-08","size":14,"back":151,"front":151},{"date":"2026-07-09","size":8,"back":50,"front":50},{"date":"2026-07-09","size":16,"back":136,"front":136},{"date":"2026-07-09","size":18,"back":90,"front":90},{"date":"2026-07-09","size":20,"back":49,"front":47},{"date":"2026-07-09","size":22,"back":6,"front":6},{"date":"2026-07-23","size":10,"back":232,"front":232},{"date":"2026-07-26","size":12,"back":192,"front":192},{"date":"2026-07-26","size":12,"back":96,"front":100},{"date":"2026-07-27","size":14,"back":261,"front":261},{"date":"2026-07-27","size":16,"back":188,"front":188},{"date":"2026-07-28","size":18,"back":108,"front":108},{"date":"2026-07-30","size":22,"back":10,"front":10},{"date":"2026-07-30","size":20,"back":46,"front":46},{"date":"2026-07-30","size":6,"back":5,"front":5},{"date":"2026-08-09","size":8,"back":153,"front":153}]},"Blue":{"sent":[{"date":"2026-07-16","size":6,"back":12,"front":12},{"date":"2026-07-16","size":22,"back":8,"front":8},{"date":"2026-07-16","size":20,"back":42,"front":42},{"date":"2026-07-16","size":8,"back":48,"front":48},{"date":"2026-07-20","size":24,"back":5,"front":5},{"date":"2026-07-20","size":10,"back":68,"front":68},{"date":"2026-07-20","size":12,"back":76,"front":76},{"date":"2026-07-20","size":18,"back":39,"front":39},{"date":"2026-07-20","size":16,"back":64,"front":64},{"date":"2026-07-20","size":14,"back":68,"front":68},{"date":"2026-07-30","size":14,"back":152,"front":152},{"date":"2026-07-30","size":10,"back":152,"front":152},{"date":"2026-07-30","size":12,"back":152,"front":152},{"date":"2026-08-03","size":16,"back":140,"front":140},{"date":"2026-08-03","size":18,"back":114,"front":114}],"recv":[{"date":"2026-07-29","size":10,"back":68,"front":68},{"date":"2026-07-29","size":12,"back":76,"front":76},{"date":"2026-07-29","size":14,"back":68,"front":68},{"date":"2026-07-29","size":16,"back":64,"front":64},{"date":"2026-07-30","size":8,"back":48,"front":48},{"date":"2026-07-30","size":22,"back":8,"front":8},{"date":"2026-07-30","size":20,"back":42,"front":42},{"date":"2026-07-30","size":24,"back":5,"front":5},{"date":"2026-07-30","size":18,"back":37,"front":37},{"date":"2026-08-03","size":6,"back":12,"front":12},{"date":"2026-08-09","size":18,"back":114,"front":114}]},"Navy":{"sent":[{"date":"2026-07-01","size":12,"back":132,"front":132},{"date":"2026-07-01","size":14,"back":292,"front":292},{"date":"2026-07-02","size":8,"back":21,"front":21},{"date":"2026-07-02","size":20,"back":96,"front":96},{"date":"2026-07-02","size":22,"back":20,"front":20},{"date":"2026-07-02","size":18,"back":150,"front":150},{"date":"2026-07-02","size":16,"back":264,"front":264},{"date":"2026-07-14","size":6,"back":6,"front":6},{"date":"2026-07-14","size":24,"back":7,"front":7}],"recv":[{"date":"2026-07-11","size":14,"back":292,"front":290},{"date":"2026-07-12","size":16,"back":264,"front":108},{"date":"2026-07-14","size":18,"back":150,"front":150},{"date":"2026-07-14","size":20,"back":96,"front":96},{"date":"2026-07-15","size":12,"back":129,"front":132},{"date":"2026-07-15","size":22,"back":20,"front":20},{"date":"2026-07-16","size":24,"back":7,"front":7},{"date":"2026-07-16","size":6,"back":6,"front":6},{"date":"2026-07-02","size":8,"back":21,"front":21},{"date":"2026-07-02","size":16,"back":0,"front":152},{"date":"2026-07-23","size":12,"back":3,"front":0},{"date":"2026-07-23","size":16,"back":0,"front":4}]}};
+
+let db = null;
+let colors = [];      // [{id, hex}]
+let entries = [];      // [{id, type:'sent'|'received', color, size, date, back, front}]
+let activeTab = "dashboard";
+let unsub = [];
+
+function showToast(msg){
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  clearTimeout(showToast._h);
+  showToast._h = setTimeout(()=>t.classList.remove('show'), 2200);
+}
+
+function setConn(state, text){
+  const el = document.getElementById('connStatus');
+  el.className = 'status-dot ' + (state||'');
+  document.getElementById('connText').textContent = text;
+}
+
+/* ---------- init ---------- */
+function isConfigured(){
+  return firebaseConfig.apiKey && firebaseConfig.apiKey !== "YOUR_API_KEY";
+}
+
+function init(){
+  if(!isConfigured()){
+    document.getElementById('setupOverlay').style.display = 'flex';
+    setConn('err','config missing');
+    renderTabs(); renderApp();
+    return;
+  }
+  try{
+    firebase.initializeApp(firebaseConfig);
+    db = firebase.firestore();
+    setConn('','connecting…');
+    listenColors();
+    listenEntries();
+  }catch(e){
+    console.error(e);
+    setConn('err','init failed');
+    showToast('Firebase init failed — check console');
+  }
+}
+
+function listenColors(){
+  const ref = db.collection('colors').orderBy('order');
+  const u = ref.onSnapshot(async snap=>{
+    if(snap.empty){
+      // seed defaults once
+      const batch = db.batch();
+      DEFAULT_COLORS.forEach((c,i)=>{
+        batch.set(db.collection('colors').doc(c.id), {hex:c.hex, order:i});
+      });
+      await batch.commit().catch(err=>console.error(err));
+      return;
+    }
+    colors = snap.docs.map(d=>({id:d.id, ...d.data()}));
+    if(!colors.find(c=>c.id===activeTab) && activeTab!=='dashboard') activeTab='dashboard';
+    setConn('live','live');
+    renderTabs();
+    renderApp();
+  }, err=>{
+    console.error(err);
+    setConn('err','connection error');
+    showToast('Firestore error — check config & rules');
+  });
+  unsub.push(u);
+}
+
+function listenEntries(){
+  const u = db.collection('entries').onSnapshot(snap=>{
+    entries = snap.docs.map(d=>({id:d.id, ...d.data()}));
+    renderApp();
+  }, err=>{
+    console.error(err);
+    setConn('err','connection error');
+  });
+  unsub.push(u);
+}
+
+/* ---------- data helpers ---------- */
+function agg(colorId){
+  // returns per-size {sentBack,sentFront,sentTotal,recvBack,recvFront,recvTotal,dueBack,dueFront,dueTotal}
+  const out = {};
+  SIZES.forEach(s=> out[s] = {sB:0,sF:0,rB:0,rF:0});
+  entries.filter(e=> !colorId || e.color===colorId).forEach(e=>{
+    if(!out[e.size]) out[e.size] = {sB:0,sF:0,rB:0,rF:0};
+    const back = Number(e.back)||0, front = Number(e.front)||0;
+    if(e.type==='sent'){ out[e.size].sB += back; out[e.size].sF += front; }
+    else { out[e.size].rB += back; out[e.size].rF += front; }
+  });
+  return out;
+}
+
+function aggAllColors(){
+  const byColor = {};
+  colors.forEach(c=> byColor[c.id] = agg(c.id));
+  return byColor;
+}
+
+function grandTotals(rows){
+  // rows: {sB,sF,rB,rF} per size -> sum
+  let sB=0,sF=0,rB=0,rF=0;
+  Object.values(rows).forEach(r=>{ sB+=r.sB; sF+=r.sF; rB+=r.rB; rF+=r.rF; });
+  return {sB,sF,rB,rF, sT:sB+sF, rT:rB+rF, dB:sB-rB, dF:sF-rF, dT:(sB+sF)-(rB+rF)};
+}
+
+/* ---------- rendering ---------- */
+function renderTabs(){
+  const bar = document.getElementById('tabBar');
+  let html = `<button class="tab ${activeTab==='dashboard'?'active':''}" data-tab="dashboard">Dashboard</button>`;
+  colors.forEach(c=>{
+    html += `<button class="tab ${activeTab===c.id?'active':''}" data-tab="${c.id}">
+      <span class="swatch" style="background:${c.hex}"></span>${c.id}
+    </button>`;
+  });
+  html += `<button class="tab" id="addColorTab" title="Add color"><span class="add-color"></span>+</button>`;
+  bar.innerHTML = html;
+  bar.querySelectorAll('.tab[data-tab]').forEach(btn=>{
+    btn.onclick = ()=>{ activeTab = btn.dataset.tab; renderTabs(); renderApp(); };
+  });
+  const addBtn = document.getElementById('addColorTab');
+  if(addBtn) addBtn.onclick = onAddColor;
+}
+
+async function onAddColor(){
+  const name = prompt("New color name (e.g. Olive):");
+  if(!name) return;
+  const trimmed = name.trim();
+  if(!trimmed) return;
+  if(colors.find(c=>c.id.toLowerCase()===trimmed.toLowerCase())){ showToast('Color already exists'); return; }
+  const hex = prompt("Hex code for swatch (e.g. #7a8a4a):", "#7a8a4a") || "#7a8a4a";
+  try{
+    await db.collection('colors').doc(trimmed).set({hex, order: colors.length});
+    showToast(`Added ${trimmed}`);
+  }catch(e){ console.error(e); showToast('Failed to add color'); }
+}
+
+function renderApp(){
+  const main = document.getElementById('app');
+  if(!isConfigured()){ main.innerHTML = ''; return; }
+  if(activeTab === 'dashboard'){ main.innerHTML = dashboardHTML(); bindDashboard(); }
+  else{ main.innerHTML = colorHTML(activeTab); bindColorPage(activeTab); }
+}
+
+function statusBadge(due){
+  return due<=0 ? `<span class="badge done">Done</span>` : `<span class="badge pending">Pending</span>`;
+}
+
+function dashboardHTML(){
+  const byColor = aggAllColors();
+  const gAll = grandTotals(Object.assign({}, ...Object.values(byColor)));
+  // recompute proper grand total across all colors+sizes
+  let sB=0,sF=0,rB=0,rF=0;
+  Object.values(byColor).forEach(rows=>{
+    Object.values(rows).forEach(r=>{ sB+=r.sB; sF+=r.sF; rB+=r.rB; rF+=r.rF; });
+  });
+  const sT=sB+sF, rT=rB+rF, dT=sT-rT;
+
+  let colorBlocks = '';
+  colors.forEach(c=>{
+    const rows = byColor[c.id];
+    const ct = grandTotals(rows);
+    let body = '';
+    SIZES.forEach(s=>{
+      const r = rows[s] || {sB:0,sF:0,rB:0,rF:0};
+      const sTot=r.sB+r.sF, rTot=r.rB+r.rF, dB=r.sB-r.rB, dF=r.sF-r.rF, dTot=sTot-rTot;
+      if(sTot===0 && rTot===0) return;
+      body += `<tr>
+        <td data-label="Size">${s}</td>
+        <td class="num" data-label="Sent Back">${r.sB}</td><td class="num" data-label="Sent Front">${r.sF}</td><td class="num" data-label="Sent Total">${sTot}</td>
+        <td class="num" data-label="Recv Back">${r.rB}</td><td class="num" data-label="Recv Front">${r.rF}</td><td class="num" data-label="Recv Total">${rTot}</td>
+        <td class="num" data-label="Due Back">${dB}</td><td class="num" data-label="Due Front">${dF}</td><td class="num" data-label="Due Total">${dTot}</td>
+      </tr>`;
+    });
+    colorBlocks += `
+    <div class="card panel color-card" style="margin-bottom:16px;--accent:${c.hex};">
+      <div class="color-head">
+        <span class="dot"></span>
+        <span class="name">${c.id}</span>
+        <span class="due-pill${ct.dT<=0?' zero':''}">${ct.dT<=0?'All Done':'Due '+ct.dT}</span>
+      </div>
+      <div class="table-scroll">
+      <table>
+        <thead><tr>
+          <th>Size</th><th>Sent Back</th><th>Sent Front</th><th>Sent Total</th>
+          <th>Recv Back</th><th>Recv Front</th><th>Recv Total</th>
+          <th>Due Back</th><th>Due Front</th><th>Due Total</th>
+        </tr></thead>
+        <tbody>
+          ${body || `<tr><td colspan="10" class="empty">No entries yet for ${c.id}</td></tr>`}
+          <tr class="total-row">
+            <td data-label="">Total</td>
+            <td class="num" data-label="Sent Back">${ct.sB}</td><td class="num" data-label="Sent Front">${ct.sF}</td><td class="num" data-label="Sent Total">${ct.sT}</td>
+            <td class="num" data-label="Recv Back">${ct.rB}</td><td class="num" data-label="Recv Front">${ct.rF}</td><td class="num" data-label="Recv Total">${ct.rT}</td>
+            <td class="num" data-label="Due Back">${ct.dB}</td><td class="num" data-label="Due Front">${ct.dF}</td><td class="num" data-label="Due Total">${ct.dT}</td>
+          </tr>
+        </tbody>
+      </table>
+      </div>
+    </div>`;
+  });
+
+  return `
+    <div class="stat-row">
+      <div class="stat"><div class="label">Total Sent</div><div class="value num">${sT}</div></div>
+      <div class="stat recv"><div class="label">Total Received</div><div class="value num">${rT}</div></div>
+      <div class="stat due"><div class="label">Total Due</div><div class="value num">${dT}</div></div>
+      <div class="stat"><div class="label">Colors Tracked</div><div class="value num">${colors.length}</div></div>
+    </div>
+    ${colors.length ? colorBlocks : `<div class="card panel"><div class="empty">No colors yet. Use the + tab above to add one.</div></div>`}
+    ${entries.length===0 ? `
+    <div class="card panel stitched" style="text-align:center;">
+      <div class="section-title" style="justify-content:center;">Import Original Excel Data</div>
+      <p class="small-muted" style="max-width:440px;margin:0 auto 14px auto;">
+        Load every Sent / Received entry from the original Print_Part_P-6.xlsx register (Brown, Coral, Blue, Navy) into this tracker. Run once — safe to skip if you'd rather start fresh.
+      </p>
+      <button class="primary" id="importBtn">Import Excel Data</button>
+    </div>` : ''}
+  `;
+}
+
+function bindDashboard(){
+  const btn = document.getElementById('importBtn');
+  if(btn) btn.onclick = runImport;
+}
+
+async function runImport(){
+  if(entries.length>0){
+    if(!confirm('Entries already exist. Import anyway? This may create duplicates.')) return;
+  } else {
+    if(!confirm('Import all original Excel entries into Firestore now?')) return;
+  }
+  const btn = document.getElementById('importBtn');
+  if(btn){ btn.disabled = true; btn.textContent = 'Importing…'; }
+  try{
+    let batch = db.batch();
+    let count = 0, opsInBatch = 0;
+    for(const color of Object.keys(SEED_DATA)){
+      if(!colors.find(c=>c.id===color)){
+        const def = DEFAULT_COLORS.find(d=>d.id===color);
+        await db.collection('colors').doc(color).set({hex: def?def.hex:'#888888', order: colors.length});
+      }
+      for(const type of ['sent','recv']){
+        const list = SEED_DATA[color][type];
+        const fType = type==='sent' ? 'sent' : 'received';
+        for(const e of list){
+          const ref = db.collection('entries').doc();
+          batch.set(ref, {
+            color, type: fType, date: e.date, size: Number(e.size),
+            back: Number(e.back)||0, front: Number(e.front)||0,
+            createdAt: firebase.firestore.FieldValue.serverTimestamp()
+          });
+          count++; opsInBatch++;
+          if(opsInBatch>=400){
+            await batch.commit();
+            batch = db.batch();
+            opsInBatch = 0;
+          }
+        }
+      }
+    }
+    if(opsInBatch>0) await batch.commit();
+    showToast(`Imported ${count} entries`);
+  }catch(e){
+    console.error(e);
+    showToast('Import failed — check console');
+  }
+}
+
+function colorHTML(colorId){
+  const c = colors.find(x=>x.id===colorId);
+  const rows = agg(colorId);
+  const ct = grandTotals(rows);
+
+  const sentEntries = entries.filter(e=>e.color===colorId && e.type==='sent').sort((a,b)=> (a.date||'').localeCompare(b.date||''));
+  const recvEntries = entries.filter(e=>e.color===colorId && e.type==='received').sort((a,b)=> (a.date||'').localeCompare(b.date||''));
+
+  const sizeRows = SIZES.map(s=>{
+    const r = rows[s] || {sB:0,sF:0,rB:0,rF:0};
+    const sTot=r.sB+r.sF, rTot=r.rB+r.rF, dB=r.sB-r.rB, dF=r.sF-r.rF, dTot=sTot-rTot;
+    return `<tr>
+      <td data-label="Size">${s}</td>
+      <td class="num" data-label="Sent Back">${r.sB}</td><td class="num" data-label="Sent Front">${r.sF}</td><td class="num" data-label="Sent Total">${sTot}</td>
+      <td class="num" data-label="Recv Back">${r.rB}</td><td class="num" data-label="Recv Front">${r.rF}</td><td class="num" data-label="Recv Total">${rTot}</td>
+      <td class="num" data-label="Due Back">${dB}</td><td class="num" data-label="Due Front">${dF}</td><td class="num" data-label="Due Total">${dTot}</td>
+      <td data-label="Status">${statusBadge(dTot)}</td>
+    </tr>`;
+  }).join('');
+
+  const sizeOptions = SIZES.map(s=>`<option value="${s}">${s}</option>`).join('');
+
+  function entryRows(list, type){
+    if(!list.length) return `<tr><td colspan="5" class="empty">No ${type} entries yet</td></tr>`;
+    return list.map(e=>`
+      <tr data-row="${e.id}">
+        <td data-label="Date / Size"><span class="e-date">${e.date||'—'}</span><span class="e-size">Size ${e.size}</span></td>
+        <td class="num" data-label="Back">${e.back||0}</td>
+        <td class="num" data-label="Front">${e.front||0}</td>
+        <td class="num" data-label="Total">${(Number(e.back)||0)+(Number(e.front)||0)}</td>
+        <td data-label="">
+          <button class="icon-btn" data-edit="${e.id}" title="Edit">✎ Edit</button>
+          <button class="icon-btn" data-del="${e.id}" title="Delete">✕ Delete</button>
+        </td>
+      </tr>
+    `).join('');
+  }
+
+  return `
+    <div class="color-head" style="--accent:${c?c.hex:'#2f9e58'};margin-bottom:14px;">
+      <span class="dot"></span>
+      <span class="name">${colorId}</span>
+      <span class="due-pill${ct.dT<=0?' zero':''}">${ct.dT<=0?'All Done':'Due '+ct.dT}</span>
+    </div>
+    <div class="stat-row">
+      <div class="stat"><div class="label">Sent</div><div class="value num">${ct.sT}</div></div>
+      <div class="stat recv"><div class="label">Received</div><div class="value num">${ct.rT}</div></div>
+      <div class="stat due"><div class="label">Due</div><div class="value num">${ct.dT}</div></div>
+      <div class="stat"><div class="label">Swatch</div><div class="value" style="display:flex;align-items:center;gap:8px;"><span style="width:20px;height:20px;border-radius:5px;background:${c?c.hex:'#888'};display:inline-block;box-shadow:0 0 0 1px rgba(0,0,0,0.1);"></span></div></div>
+    </div>
+
+    <div class="grid2">
+      <div class="card panel stitched color-card" style="--accent:${c?c.hex:'#2f9e58'};">
+        <div class="section-title">Log Sent to Print</div>
+        <div class="form-row">
+          <div class="field"><label>Date</label><input type="date" id="sentDate"></div>
+          <div class="field"><label>Size</label><select id="sentSize">${sizeOptions}</select></div>
+          <div class="field"><label>Backpart</label><input type="number" id="sentBack" min="0" placeholder="0"></div>
+          <div class="field"><label>Frontpart</label><input type="number" id="sentFront" min="0" placeholder="0"></div>
+          <button class="primary" id="addSentBtn">Add</button>
+        </div>
+      </div>
+      <div class="card panel stitched color-card" style="--accent:${c?c.hex:'#2f9e58'};">
+        <div class="section-title">Log Received from Print</div>
+        <div class="form-row">
+          <div class="field"><label>Date</label><input type="date" id="recvDate"></div>
+          <div class="field"><label>Size</label><select id="recvSize">${sizeOptions}</select></div>
+          <div class="field"><label>Backpart</label><input type="number" id="recvBack" min="0" placeholder="0"></div>
+          <div class="field"><label>Frontpart</label><input type="number" id="recvFront" min="0" placeholder="0"></div>
+          <button class="primary" id="addRecvBtn">Add</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="card panel color-card" style="--accent:${c?c.hex:'#2f9e58'};margin-bottom:16px;">
+      <div class="section-title">Size-wise Status <span class="n">— ${colorId}</span></div>
+      <div class="table-scroll">
+      <table>
+        <thead><tr>
+          <th>Size</th><th>Sent Back</th><th>Sent Front</th><th>Sent Total</th>
+          <th>Recv Back</th><th>Recv Front</th><th>Recv Total</th>
+          <th>Due Back</th><th>Due Front</th><th>Due Total</th><th>Status</th>
+        </tr></thead>
+        <tbody>${sizeRows}</tbody>
+      </table>
+      </div>
+    </div>
+
+    <div class="grid2">
+      <div class="card panel">
+        <div class="section-title">Sent Register <span class="n">${sentEntries.length} entries</span></div>
+        <div class="table-scroll">
+        <table class="entry-table">
+          <thead><tr><th>Date / Size</th><th>Back</th><th>Front</th><th>Total</th><th></th></tr></thead>
+          <tbody>${entryRows(sentEntries,'sent')}</tbody>
+        </table>
+        </div>
+      </div>
+      <div class="card panel">
+        <div class="section-title">Received Register <span class="n">${recvEntries.length} entries</span></div>
+        <div class="table-scroll">
+        <table class="entry-table">
+          <thead><tr><th>Date / Size</th><th>Back</th><th>Front</th><th>Total</th><th></th></tr></thead>
+          <tbody>${entryRows(recvEntries,'received')}</tbody>
+        </table>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+function bindColorPage(colorId){
+  const addSentBtn = document.getElementById('addSentBtn');
+  const addRecvBtn = document.getElementById('addRecvBtn');
+  if(addSentBtn) addSentBtn.onclick = ()=> addEntry(colorId,'sent');
+  if(addRecvBtn) addRecvBtn.onclick = ()=> addEntry(colorId,'received');
+
+  document.querySelectorAll('[data-del]').forEach(btn=>{
+    btn.onclick = async ()=>{
+      if(!confirm('Delete this entry?')) return;
+      try{
+        await db.collection('entries').doc(btn.dataset.del).delete();
+        showToast('Entry deleted');
+      }catch(e){ console.error(e); showToast('Delete failed'); }
+    };
+  });
+
+  document.querySelectorAll('[data-edit]').forEach(btn=>{
+    btn.onclick = ()=> startEditRow(btn.dataset.edit);
+  });
+}
+
+function startEditRow(entryId){
+  const e = entries.find(x=>x.id===entryId);
+  if(!e) return;
+  const row = document.querySelector(`tr[data-row="${entryId}"]`);
+  if(!row) return;
+  row.innerHTML = `
+    <td data-label="Date / Size" style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;">
+      <input type="date" class="edit-date" value="${e.date||''}" style="flex:1 1 140px;min-width:0;max-width:100%;">
+      <select class="edit-size" style="flex:0 1 80px;min-width:0;max-width:100%;">${SIZES.map(s=>`<option value="${s}" ${Number(s)===Number(e.size)?'selected':''}>${s}</option>`).join('')}</select>
+    </td>
+    <td class="num" data-label="Back"><input type="number" min="0" class="edit-back" value="${e.back||0}" style="width:100%;min-width:0;max-width:70px;"></td>
+    <td class="num" data-label="Front"><input type="number" min="0" class="edit-front" value="${e.front||0}" style="width:100%;min-width:0;max-width:70px;"></td>
+    <td class="num" data-label="Total">—</td>
+    <td data-label="">
+      <button class="icon-btn save-edit" title="Save" style="color:var(--good);">✓ Save</button>
+      <button class="icon-btn cancel-edit" title="Cancel">✕ Cancel</button>
+    </td>
+  `;
+  row.querySelector('.cancel-edit').onclick = ()=> renderApp();
+  row.querySelector('.save-edit').onclick = async ()=>{
+    const date = row.querySelector('.edit-date').value;
+    const size = Number(row.querySelector('.edit-size').value);
+    const back = Number(row.querySelector('.edit-back').value) || 0;
+    const front = Number(row.querySelector('.edit-front').value) || 0;
+    if(!date){ showToast('Pick a date'); return; }
+    if(back===0 && front===0){ showToast('Enter back and/or front quantity'); return; }
+    try{
+      await db.collection('entries').doc(entryId).update({ date, size, back, front });
+      showToast('Entry updated');
+    }catch(err){ console.error(err); showToast('Update failed'); }
+  };
+}
+
+async function addEntry(colorId, type){
+  const prefix = type==='sent' ? 'sent' : 'recv';
+  const date = document.getElementById(prefix+'Date').value;
+  const size = Number(document.getElementById(prefix+'Size').value);
+  const back = Number(document.getElementById(prefix+'Back').value) || 0;
+  const front = Number(document.getElementById(prefix+'Front').value) || 0;
+
+  if(!date){ showToast('Pick a date'); return; }
+  if(back===0 && front===0){ showToast('Enter back and/or front quantity'); return; }
+
+  try{
+    await db.collection('entries').add({
+      color: colorId, type, date, size, back, front,
+      createdAt: firebase.firestore.FieldValue.serverTimestamp()
+    });
+    showToast(`${type==='sent'?'Sent':'Received'} entry logged`);
+    ['Date','Size','Back','Front'].forEach(f=>{
+      const el = document.getElementById(prefix+f);
+      if(el && f!=='Size') el.value = '';
+    });
+  }catch(e){
+    console.error(e);
+    showToast('Failed to save — check Firestore rules');
+  }
+}
+
+init();
+</script>
+</body>
+</html>
