@@ -4,6 +4,16 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>Print Part Register — Jinlite Garments</title>
+<script>
+  /* Runs before the page paints — if this device already logged in,
+     mark <html> so the CSS below hides the login screen with no flash */
+  if (localStorage.getItem('ppr_authed') === '1') {
+    document.documentElement.classList.add('ppr-authed');
+  }
+</script>
+<style>
+  html.ppr-authed #loginOverlay{ display:none !important; }
+</style>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700;800&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
 
@@ -614,38 +624,20 @@
       <p>Sign in to continue to Print Part Register.</p>
     </div>
     <div class="login-card">
-      <div id="loginError" class="login-error">Invalid username or password.</div>
+      <div id="loginError" class="login-error">Wrong password. Please try again.</div>
       <form id="loginForm" autocomplete="off">
-        <div class="login-field">
-          <label>Email Or User Name</label>
-          <div class="login-input-wrap">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="m2 7 10 6 10-6"/></svg>
-            <input type="text" id="loginUser" placeholder="Enter your Email here" />
-          </div>
-        </div>
         <div class="login-field">
           <label>Password</label>
           <div class="login-input-wrap">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="10" width="16" height="10" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></svg>
-            <input type="password" id="loginPass" placeholder="Enter your password" />
+            <input type="password" id="loginPass" placeholder="Enter your password" autofocus />
             <button type="button" id="togglePass" aria-label="Show password">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7z"/><circle cx="12" cy="12" r="3"/></svg>
             </button>
           </div>
         </div>
-        <div class="login-row-between">
-          <label class="login-remember"><input type="checkbox" id="rememberMe" /> Remember me</label>
-          <a href="#" id="forgotPass">Forgot Password?</a>
-        </div>
-        <button type="submit" class="login-submit">Sign in</button>
+        <button type="submit" class="login-submit" style="margin-top:6px;">Sign in</button>
       </form>
-      <div class="login-or">OR LOGIN WITH</div>
-      <div class="login-social">
-        <button class="b1" type="button" aria-label="Login option 1"></button>
-        <button class="b2" type="button" aria-label="Login option 2"></button>
-        <button class="b3" type="button" aria-label="Login option 3"></button>
-      </div>
-      <div class="login-register">Don't have an account? <a href="#" id="registerNow">Register Now</a></div>
     </div>
   </div>
 </div>
@@ -1177,6 +1169,17 @@ function settingsHTML(){
       </div>
     </div>
 
+    <div class="card panel settings-section">
+      <div class="section-title">Login Password</div>
+      <p class="small-muted" style="margin:0 0 10px 0;">Changing this updates the password used on the login screen for this app.</p>
+      <div class="settings-add-row">
+        <input type="password" id="curPassInput" placeholder="Current password" autocomplete="off">
+        <input type="password" id="newPassInput" placeholder="New password" autocomplete="off">
+        <input type="password" id="confirmPassInput" placeholder="Confirm new password" autocomplete="off">
+        <button class="primary" id="changePassBtn">Change Password</button>
+      </div>
+    </div>
+
     <div class="card panel danger-card settings-section">
       <div class="section-title">Danger Zone</div>
       <p class="small-muted" style="margin:0 0 12px 0;">Permanently deletes every color, size, part, style and register entry. This cannot be undone.</p>
@@ -1190,6 +1193,19 @@ async function addFirestoreListItem(collection, id, orderLen){
 }
 
 function bindSettings(){
+  document.getElementById('changePassBtn').onclick = ()=>{
+    const cur = document.getElementById('curPassInput').value;
+    const next = document.getElementById('newPassInput').value;
+    const confirmPass = document.getElementById('confirmPassInput').value;
+    if(cur !== getLoginPassword()){ showToast('Current password is wrong'); return; }
+    if(!next || next.length < 4){ showToast('New password must be at least 4 characters'); return; }
+    if(next !== confirmPass){ showToast('New password and confirmation do not match'); return; }
+    setLoginPassword(next);
+    document.getElementById('curPassInput').value = '';
+    document.getElementById('newPassInput').value = '';
+    document.getElementById('confirmPassInput').value = '';
+    showToast('Password changed successfully');
+  };
   document.getElementById('addColorBtn').onclick = async ()=>{
     const targetStyle = document.getElementById('newColorStyle').value;
     const name = (document.getElementById('newColorName').value||'').trim();
@@ -1714,15 +1730,29 @@ async function addEntry(colorId, type, btn){
 document.getElementById('hamburgerBtn').onclick = openDrawer;
 document.getElementById('drawerOverlay').onclick = closeDrawer;
 
-/* ---------- Login screen ---------- */
+/* ---------- Login password storage (shared by login screen + Settings) ---------- */
+const PPR_PASS_KEY = 'ppr_password';
+const PPR_AUTH_KEY = 'ppr_authed';
+const PPR_DEFAULT_PASS = 'saifan';
+function getLoginPassword(){
+  return localStorage.getItem(PPR_PASS_KEY) || PPR_DEFAULT_PASS;
+}
+function setLoginPassword(newPass){
+  localStorage.setItem(PPR_PASS_KEY, newPass);
+}
+
+/* ---------- Login screen (password-only, remembered on this device) ---------- */
 (function(){
-  const LOGIN_USER = 'stmp';
-  const LOGIN_PASS = 'saifan';
   const overlay = document.getElementById('loginOverlay');
   const form = document.getElementById('loginForm');
   const errBox = document.getElementById('loginError');
   const toggleBtn = document.getElementById('togglePass');
   const passInput = document.getElementById('loginPass');
+
+  // Already logged in on this device/browser? Skip straight past the login screen.
+  if (localStorage.getItem(PPR_AUTH_KEY) === '1') {
+    overlay.style.display = 'none';
+  }
 
   toggleBtn.onclick = ()=>{
     passInput.type = passInput.type === 'password' ? 'text' : 'password';
@@ -1730,18 +1760,17 @@ document.getElementById('drawerOverlay').onclick = closeDrawer;
 
   form.onsubmit = (e)=>{
     e.preventDefault();
-    const u = document.getElementById('loginUser').value.trim();
     const p = passInput.value;
-    if(u === LOGIN_USER && p === LOGIN_PASS){
+    if(p === getLoginPassword()){
       errBox.classList.remove('show');
       overlay.style.display = 'none';
+      try{ localStorage.setItem(PPR_AUTH_KEY, '1'); }catch(e){}
     } else {
       errBox.classList.add('show');
+      passInput.value = '';
+      passInput.focus();
     }
   };
-
-  document.getElementById('forgotPass').onclick = (e)=>{ e.preventDefault(); alert('Please contact your admin to reset your password.'); };
-  document.getElementById('registerNow').onclick = (e)=>{ e.preventDefault(); alert('Please contact your admin to create an account.'); };
 })();
 
 init();
